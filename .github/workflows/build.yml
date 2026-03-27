@@ -10,17 +10,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, pdo_sqlite, openssl, fileinfo, curl
+          extensions: mbstring, pdo_sqlite, openssl, fileinfo, curl, gd
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Install PHP dependencies
         run: composer install --no-dev --optimize-autoloader
@@ -52,6 +56,7 @@ jobs:
           echo "extension=openssl" >> php-portable/php.ini
           echo "extension=fileinfo" >> php-portable/php.ini
           echo "extension=curl" >> php-portable/php.ini
+          echo "extension=gd" >> php-portable/php.ini
 
       - name: Create lancer.bat
         run: |
