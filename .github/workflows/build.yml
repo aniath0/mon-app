@@ -1,0 +1,106 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, openssl, fileinfo, curl
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Prepare Laravel
+        run: |
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          echo "" > database/database.sqlite
+
+      - name: Download PHP portable
+        run: |
+          curl -L -o php.zip https://windows.php.net/downloads/releases/php-8.2.28-Win32-vs16-x64.zip
+          mkdir php-portable
+          Expand-Archive -Path php.zip -DestinationPath php-portable
+
+      - name: Create php.ini
+        run: |
+          cp php-portable/php.ini-production php-portable/php.ini
+          echo "extension=pdo_sqlite" >> php-portable/php.ini
+          echo "extension=mbstring" >> php-portable/php.ini
+          echo "extension=openssl" >> php-portable/php.ini
+          echo "extension=fileinfo" >> php-portable/php.ini
+          echo "extension=curl" >> php-portable/php.ini
+
+      - name: Create lancer.bat
+        run: |
+          echo '@echo off' > lancer.bat
+          echo 'cd /d "%~dp0"' >> lancer.bat
+          echo 'start "" /B php-portable\php.exe -S 127.0.0.1:8000 -t app\public app\server.php' >> lancer.bat
+          echo 'timeout /t 2 /nobreak > nul' >> lancer.bat
+          echo 'start http://127.0.0.1:8000' >> lancer.bat
+
+      - name: Create stopper.bat
+        run: |
+          echo '@echo off' > stopper.bat
+          echo 'taskkill /F /IM php.exe' >> stopper.bat
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Create Inno Setup script
+        run: |
+          @"
+          [Setup]
+          AppName=MonApp
+          AppVersion=1.0
+          DefaultDirName={pf}\MonApp
+          DefaultGroupName=MonApp
+          OutputDir=dist
+          OutputBaseFilename=MonApp-Installer
+          Compression=lzma
+          SolidCompression=yes
+
+          [Files]
+          Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs
+          Source: "app\*"; DestDir: "{app}\app"; Flags: recursesubdirs excludes "node_modules"
+          Source: "lancer.bat"; DestDir: "{app}"
+          Source: "stopper.bat"; DestDir: "{app}"
+
+          [Icons]
+          Name: "{group}\Lancer MonApp"; Filename: "{app}\lancer.bat"
+          Name: "{userdesktop}\MonApp"; Filename: "{app}\lancer.bat"
+
+          [Run]
+          Filename: "{app}\lancer.bat"; Description: "Lancer l'application"; Flags: postinstall nowait
+          "@ | Out-File -FilePath monapp.iss -Encoding UTF8
+
+      - name: Compile installer
+        run: iscc monapp.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonApp-Installer
+          path: dist/MonApp-Installer.exe
