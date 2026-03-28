@@ -113,12 +113,13 @@ jobs:
           [Setup]
           AppName=MonApp
           AppVersion=1.0
-          DefaultDirName={pf}\MonApp
+          DefaultDirName=C:\MonApp
           DefaultGroupName=MonApp
           OutputDir=dist
           OutputBaseFilename=MonApp-Installer
           Compression=lzma
           SolidCompression=yes
+          PrivilegesRequired=lowest
 
           [Files]
           Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs
