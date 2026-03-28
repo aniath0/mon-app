@@ -31,10 +31,14 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 17px; color: #000
 <body>
 <div class="container">
 
-<div class="logo"><img src="{{ public_path('images/logo.jpg') }}"></div>
+<div class="logo">
+    @if($logoBase64)
+        <img src="{{ $logoBase64 }}">
+    @endif
+</div>
 
 <div class="right-section">
-    <img src="{{ $qrPath }}" class="qr-code">
+    <img src="{{ $qrBase64 }}" class="qr-code">
     <div class="result-info">
         <strong>N° {{ $result->code }}</strong><br>
         {{ $result->date->format('d/m/Y') }}
@@ -59,18 +63,16 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 17px; color: #000
     </tr>
 </table>
 
-{{-- Boucle sur tous les examens --}}
 @foreach($examResults as $examId => $results)
 <div class="exam-block">
     <div class="exam-title">{{ $results->first()->exam->name ?? 'Examen' }}</div>
-    
+
     @php
-        // Filtrer seulement les résultats qui ont un champ "résultat" rempli
         $filteredResults = $results->filter(function($r) {
             return !empty(trim($r->resultat)) && $r->resultat != '-';
         });
     @endphp
-    
+
     @if($filteredResults->count() > 0)
     <table class="results-table">
         <thead>
@@ -113,6 +115,8 @@ body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 17px; color: #000
 <div class="signature-section">
     Le Biologiste Responsable<br>
     {{ auth()->user()->name ?? '' }}
+</div>
+
 </div>
 </body>
 </html>
