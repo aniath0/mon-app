@@ -75,6 +75,7 @@ jobs:
           Add-Content php-portable/php.ini "extension=fileinfo"
           Add-Content php-portable/php.ini "extension=curl"
           Add-Content php-portable/php.ini "extension=gd"
+          Add-Content php-portable/php.ini "include_path = '.'"
 
       - name: Copy app into subfolder
         run: |
