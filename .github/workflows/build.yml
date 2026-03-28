@@ -50,18 +50,21 @@ jobs:
       - name: Create php.ini
         run: |
           cp php-portable/php.ini-production php-portable/php.ini
-          echo "extension=pdo_sqlite" >> php-portable/php.ini
-          echo "extension=mbstring" >> php-portable/php.ini
-          echo "extension=openssl" >> php-portable/php.ini
-          echo "extension=fileinfo" >> php-portable/php.ini
-          echo "extension=curl" >> php-portable/php.ini
-          echo "extension=gd" >> php-portable/php.ini
+          Add-Content php-portable/php.ini "extension_dir = ext"
+          Add-Content php-portable/php.ini "extension=pdo_sqlite"
+          Add-Content php-portable/php.ini "extension=mbstring"
+          Add-Content php-portable/php.ini "extension=openssl"
+          Add-Content php-portable/php.ini "extension=fileinfo"
+          Add-Content php-portable/php.ini "extension=curl"
+          Add-Content php-portable/php.ini "extension=gd"
 
       - name: Create lancer.bat
         run: |
           echo '@echo off' > lancer.bat
           echo 'cd /d "%~dp0"' >> lancer.bat
-          echo 'start "" /B php-portable\php.exe -S 127.0.0.1:8000 -t app\public app\server.php' >> lancer.bat
+          echo 'set APP_DIR=%~dp0app' >> lancer.bat
+          echo 'set PHP_DIR=%~dp0php-portable' >> lancer.bat
+          echo 'start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"' >> lancer.bat
           echo 'timeout /t 2 /nobreak > nul' >> lancer.bat
           echo 'start http://127.0.0.1:8000' >> lancer.bat
 
