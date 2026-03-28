@@ -44,7 +44,11 @@ jobs:
 
       - name: Download PHP portable
         run: |
-          Invoke-WebRequest -Uri "https://windows.php.net/downloads/releases/php-8.2.25-Win32-vs16-x64.zip" -OutFile php.zip
+          $page = Invoke-WebRequest -Uri "https://windows.php.net/download/" -UseBasicParsing
+          $link = ($page.Links | Where-Object { $_.href -match "php-8\.2\.\d+-Win32-vs16-x64\.zip" } | Select-Object -First 1).href
+          $url = "https://windows.php.net" + $link
+          Write-Host "Downloading: $url"
+          Invoke-WebRequest -Uri $url -OutFile php.zip
           Expand-Archive -Path php.zip -DestinationPath php-portable -Force
 
       - name: Create php.ini
