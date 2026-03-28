@@ -39,7 +39,7 @@
                         
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $result->date->format('d/m/Y') }}</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <a href="{{ asset('storage/pdf/' . $result->code . '.pdf') }}" class="text-indigo-600 hover:text-indigo-500" target="_blank">Télécharger PDF</a>
+                            <a href="{{ asset('pdf/' . $result->code . '.pdf') }}" class="text-indigo-600 hover:text-indigo-500" target="_blank">Télécharger PDF</a>
                            
                             </form>
                             

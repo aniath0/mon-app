@@ -104,9 +104,9 @@ class ResultController extends Controller
             }
         }
 
-        // Dossiers storage
-        $pdfDir = storage_path('app/public/pdf');
-        $qrDir = storage_path('app/public/qr');
+        // Dossiers dans public/ directement (pas storage)
+        $pdfDir = public_path('pdf');
+        $qrDir = public_path('qr');
         if (!file_exists($pdfDir)) mkdir($pdfDir, 0755, true);
         if (!file_exists($qrDir)) mkdir($qrDir, 0755, true);
 
@@ -117,7 +117,7 @@ class ResultController extends Controller
         $qrPath = $qrDir . DIRECTORY_SEPARATOR . $code . '.png';
         $qrResult->saveToFile($qrPath);
 
-        // Logo en base64 pour éviter les problèmes de chemin
+        // Logo en base64
         $logoPath = public_path('images/logo.jpg');
         $logoBase64 = '';
         if (file_exists($logoPath)) {
@@ -138,6 +138,6 @@ class ResultController extends Controller
         $pdf->save($pdfDir . DIRECTORY_SEPARATOR . $code . '.pdf');
 
         return redirect()->route('resultats.index')
-            ->with('success', "Résultat #$code généré ! PDF : /storage/pdf/$code.pdf");
+            ->with('success', "Résultat #$code généré !");
     }
 }
