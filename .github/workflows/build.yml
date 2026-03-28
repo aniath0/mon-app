@@ -35,31 +35,6 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Create .env for production
-        run: |
-          $env = @'
-          APP_NAME=MonApp
-          APP_ENV=production
-          APP_KEY=base64:kcDznVIve8giC0eFAxc8yHDmHrCYtFKmO/CrKKMGoeE=
-          APP_DEBUG=false
-          APP_URL=http://127.0.0.1:8000
-          LOG_CHANNEL=stack
-          LOG_LEVEL=error
-          DB_CONNECTION=sqlite
-          SESSION_DRIVER=file
-          CACHE_STORE=file
-          QUEUE_CONNECTION=sync
-          FILESYSTEM_DISK=local
-          '@
-          $env | Out-File -FilePath .env -Encoding UTF8
-
-      - name: Prepare Laravel
-        run: |
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
-          New-Item -ItemType File -Path database/database.sqlite -Force
-
       - name: Download PHP portable
         run: |
           Invoke-WebRequest -Uri "https://windows.php.net/downloads/releases/php-8.2.30-Win32-vs16-x64.zip" -OutFile php.zip -UseBasicParsing
@@ -85,7 +60,7 @@ jobs:
             Copy-Item -Path $_.FullName -Destination app-bundle -Recurse -Force
           }
 
-      - name: Create lancer.bat
+     - name: Create lancer.bat
         run: |
           $bat = @'
           @echo off
@@ -95,12 +70,26 @@ jobs:
 
           echo Demarrage de MonApp...
 
+          if not exist "%APP_DIR%\.env" (
+            echo Creation du fichier .env...
+            echo APP_NAME=MonApp > "%APP_DIR%\.env"
+            echo APP_ENV=production >> "%APP_DIR%\.env"
+            echo APP_KEY=base64:kcDznVIve8giC0eFAxc8yHDmHrCYtFKmO/CrKKMGoeE= >> "%APP_DIR%\.env"
+            echo APP_DEBUG=false >> "%APP_DIR%\.env"
+            echo APP_URL=http://127.0.0.1:8000 >> "%APP_DIR%\.env"
+            echo DB_CONNECTION=sqlite >> "%APP_DIR%\.env"
+            echo SESSION_DRIVER=file >> "%APP_DIR%\.env"
+            echo CACHE_STORE=file >> "%APP_DIR%\.env"
+            echo QUEUE_CONNECTION=sync >> "%APP_DIR%\.env"
+          )
+
           if not exist "%APP_DIR%\database\database.sqlite" (
             echo Creation de la base de donnees...
             copy NUL "%APP_DIR%\database\database.sqlite"
           )
 
           echo Migration de la base de donnees...
+          "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" config:clear
           "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" migrate --force
 
           echo Lancement du serveur...
