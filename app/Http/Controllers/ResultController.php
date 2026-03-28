@@ -128,7 +128,7 @@ class ResultController extends Controller
         $qrBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($qrPath));
 
         $patient = Patient::findOrFail($request->patient_id);
-        $patientAge = floor($patient->dob->diffInYears(now()));
+        $patientAge = $patient->dob ? floor($patient->dob->diffInYears(now())) : 'N/A';
         $examResults = $result->examResults()->with('exam')->get()->groupBy('exam_id');
 
         $pdf = Pdf::loadView('pdf.result_multi', compact(

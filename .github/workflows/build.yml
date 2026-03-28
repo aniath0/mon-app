@@ -68,6 +68,7 @@ jobs:
           set APP_DIR=%~dp0app-bundle
           set PHP_DIR=%~dp0php-portable
           echo Demarrage de MonApp...
+
           if not exist "%APP_DIR%\.env" (
             echo Creation du fichier .env...
             echo APP_NAME=MonApp > "%APP_DIR%\.env"
@@ -80,13 +81,21 @@ jobs:
             echo CACHE_STORE=file >> "%APP_DIR%\.env"
             echo QUEUE_CONNECTION=sync >> "%APP_DIR%\.env"
           )
+
           if not exist "%APP_DIR%\database\database.sqlite" (
             echo Creation de la base de donnees...
             copy NUL "%APP_DIR%\database\database.sqlite"
           )
+
           echo Migration de la base de donnees...
           "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" config:clear
           "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" migrate --force
+
+          echo Creation du lien storage...
+          if not exist "%APP_DIR%\public\storage" (
+            "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" storage:link
+          )
+
           echo Lancement du serveur...
           start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"
           timeout /t 3 /nobreak > nul
