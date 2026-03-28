@@ -92,7 +92,18 @@ jobs:
           cd /d "%~dp0"
           set APP_DIR=%~dp0app-bundle
           set PHP_DIR=%~dp0php-portable
+
           echo Demarrage de MonApp...
+
+          if not exist "%APP_DIR%\database\database.sqlite" (
+            echo Creation de la base de donnees...
+            copy NUL "%APP_DIR%\database\database.sqlite"
+          )
+
+          echo Migration de la base de donnees...
+          "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" migrate --force
+
+          echo Lancement du serveur...
           start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"
           timeout /t 3 /nobreak > nul
           start http://127.0.0.1:8000
