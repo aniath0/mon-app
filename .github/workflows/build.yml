@@ -35,12 +35,30 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Create .env for production
+        run: |
+          $env = @'
+          APP_NAME=MonApp
+          APP_ENV=production
+          APP_KEY=base64:kcDznVIve8giC0eFAxc8yHDmHrCYtFKmO/CrKKMGoeE=
+          APP_DEBUG=false
+          APP_URL=http://127.0.0.1:8000
+          LOG_CHANNEL=stack
+          LOG_LEVEL=error
+          DB_CONNECTION=sqlite
+          SESSION_DRIVER=file
+          CACHE_STORE=file
+          QUEUE_CONNECTION=sync
+          FILESYSTEM_DISK=local
+          '@
+          $env | Out-File -FilePath .env -Encoding UTF8
+
       - name: Prepare Laravel
         run: |
           php artisan config:cache
           php artisan route:cache
           php artisan view:cache
-          echo "" > database/database.sqlite
+          New-Item -ItemType File -Path database/database.sqlite -Force
 
       - name: Download PHP portable
         run: |
@@ -58,20 +76,37 @@ jobs:
           Add-Content php-portable/php.ini "extension=curl"
           Add-Content php-portable/php.ini "extension=gd"
 
+      - name: Copy app into subfolder
+        run: |
+          mkdir app-bundle
+          $exclude = @("app-bundle","php-portable","php.zip","lancer.bat","stopper.bat","monapp.iss","dist","node_modules")
+          Get-ChildItem -Path . | Where-Object { $_.Name -notin $exclude } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination app-bundle -Recurse -Force
+          }
+
       - name: Create lancer.bat
         run: |
-          echo '@echo off' > lancer.bat
-          echo 'cd /d "%~dp0"' >> lancer.bat
-          echo 'set APP_DIR=%~dp0app' >> lancer.bat
-          echo 'set PHP_DIR=%~dp0php-portable' >> lancer.bat
-          echo 'start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"' >> lancer.bat
-          echo 'timeout /t 2 /nobreak > nul' >> lancer.bat
-          echo 'start http://127.0.0.1:8000' >> lancer.bat
+          $bat = @'
+          @echo off
+          cd /d "%~dp0"
+          set APP_DIR=%~dp0app-bundle
+          set PHP_DIR=%~dp0php-portable
+          echo Demarrage de MonApp...
+          start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"
+          timeout /t 3 /nobreak > nul
+          start http://127.0.0.1:8000
+          '@
+          $bat | Out-File -FilePath lancer.bat -Encoding ASCII
 
       - name: Create stopper.bat
         run: |
-          echo '@echo off' > stopper.bat
-          echo 'taskkill /F /IM php.exe' >> stopper.bat
+          $bat = @'
+          @echo off
+          taskkill /F /IM php.exe
+          echo MonApp arretee.
+          pause
+          '@
+          $bat | Out-File -FilePath stopper.bat -Encoding ASCII
 
       - name: Install Inno Setup
         run: choco install innosetup -y
@@ -91,7 +126,7 @@ jobs:
 
           [Files]
           Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs
-          Source: "app\*"; DestDir: "{app}\app"; Flags: recursesubdirs
+          Source: "app-bundle\*"; DestDir: "{app}\app-bundle"; Flags: recursesubdirs
           Source: "lancer.bat"; DestDir: "{app}"
           Source: "stopper.bat"; DestDir: "{app}"
 
