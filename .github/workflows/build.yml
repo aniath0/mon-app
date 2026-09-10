@@ -1,0 +1,150 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, openssl, fileinfo, curl, gd
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Download PHP portable
+        run: |
+          Invoke-WebRequest -Uri "https://windows.php.net/downloads/releases/php-8.2.30-Win32-vs16-x64.zip" -OutFile php.zip -UseBasicParsing
+          Expand-Archive -Path php.zip -DestinationPath php-portable -Force
+
+      - name: Create php.ini
+        run: |
+          cp php-portable/php.ini-production php-portable/php.ini
+          Add-Content php-portable/php.ini "extension_dir = ext"
+          Add-Content php-portable/php.ini "extension=pdo_sqlite"
+          Add-Content php-portable/php.ini "extension=mbstring"
+          Add-Content php-portable/php.ini "extension=openssl"
+          Add-Content php-portable/php.ini "extension=fileinfo"
+          Add-Content php-portable/php.ini "extension=curl"
+          Add-Content php-portable/php.ini "extension=gd"
+          Add-Content php-portable/php.ini "include_path = '.'"
+
+      - name: Copy app into subfolder
+        run: |
+          mkdir app-bundle
+          $exclude = @("app-bundle","php-portable","php.zip","lancer.bat","stopper.bat","monapp.iss","dist","node_modules")
+          Get-ChildItem -Path . | Where-Object { $_.Name -notin $exclude } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination app-bundle -Recurse -Force
+          }
+
+      - name: Create lancer.bat
+        run: |
+          $bat = @'
+          @echo off
+          cd /d "%~dp0"
+          set APP_DIR=%~dp0app-bundle
+          set PHP_DIR=%~dp0php-portable
+          echo Demarrage de MonApp...
+
+          if not exist "%APP_DIR%\.env" (
+            echo Creation du fichier .env...
+            echo APP_NAME=MonApp > "%APP_DIR%\.env"
+            echo APP_ENV=production >> "%APP_DIR%\.env"
+            echo APP_KEY=base64:kcDznVIve8giC0eFAxc8yHDmHrCYtFKmO/CrKKMGoeE= >> "%APP_DIR%\.env"
+            echo APP_DEBUG=false >> "%APP_DIR%\.env"
+            echo APP_URL=http://127.0.0.1:8000 >> "%APP_DIR%\.env"
+            echo DB_CONNECTION=sqlite >> "%APP_DIR%\.env"
+            echo SESSION_DRIVER=file >> "%APP_DIR%\.env"
+            echo CACHE_STORE=file >> "%APP_DIR%\.env"
+            echo QUEUE_CONNECTION=sync >> "%APP_DIR%\.env"
+          )
+
+          if not exist "%APP_DIR%\database\database.sqlite" (
+            echo Creation de la base de donnees...
+            copy NUL "%APP_DIR%\database\database.sqlite"
+          )
+
+          echo Migration de la base de donnees...
+          "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" config:clear
+          "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" migrate --force
+
+          echo Lancement du serveur...
+          start "" /B "%PHP_DIR%\php.exe" -S 127.0.0.1:8000 -t "%APP_DIR%\public" "%APP_DIR%\server.php"
+          timeout /t 3 /nobreak > nul
+          start http://127.0.0.1:8000
+          '@
+          $bat | Out-File -FilePath lancer.bat -Encoding ASCII
+
+      - name: Create stopper.bat
+        run: |
+          $bat = @'
+          @echo off
+          taskkill /F /IM php.exe
+          echo MonApp arretee.
+          pause
+          '@
+          $bat | Out-File -FilePath stopper.bat -Encoding ASCII
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Create Inno Setup script
+        run: |
+          $iss = @'
+          [Setup]
+          AppName=MonApp
+          AppVersion=1.0
+          DefaultDirName=C:\MonApp
+          DefaultGroupName=MonApp
+          OutputDir=dist
+          OutputBaseFilename=MonApp-Installer
+          Compression=lzma
+          SolidCompression=yes
+          PrivilegesRequired=lowest
+
+          [Files]
+          Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs
+          Source: "app-bundle\*"; DestDir: "{app}\app-bundle"; Flags: recursesubdirs
+          Source: "lancer.bat"; DestDir: "{app}"
+          Source: "stopper.bat"; DestDir: "{app}"
+
+          [Icons]
+          Name: "{group}\Lancer MonApp"; Filename: "{app}\lancer.bat"
+          Name: "{userdesktop}\MonApp"; Filename: "{app}\lancer.bat"
+
+          [Run]
+          Filename: "{app}\lancer.bat"; Description: "Lancer l'application"; Flags: postinstall nowait
+          '@
+          $iss | Out-File -FilePath monapp.iss -Encoding UTF8
+
+      - name: Compile installer
+        run: iscc monapp.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonApp-Installer
+          path: dist/MonApp-Installer.exe
