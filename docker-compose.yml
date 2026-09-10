@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laboratoire-app
+    ports:
+      - "8080:80"
+    volumes:
+      - ./www:/var/www/html
+      - ./storage:/var/www/html/storage
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=sqlite
+    restart: unless-stopped
+
+  # Optionnel : avec MySQL
+  # db:
+  #   image: mysql:8.0
+  #   container_name: laboratoire-db
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: root
+  #     MYSQL_DATABASE: laboratoire
+  #   volumes:
+  #     - db_data:/var/lib/mysql
+  #   ports:
+  #     - "3306:3306"
+
+volumes:
+  db_data:
