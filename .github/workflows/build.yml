@@ -37,7 +37,7 @@ jobs:
 
       - name: Download PHP portable
         run: |
-          Invoke-WebRequest -Uri "https://windows.php.net/downloads/releases/php-8.2.28-Win32-vs16-x64.zip" -OutFile php.zip -UseBasicParsing
+          Invoke-WebRequest -Uri "https://windows.php.net/downloads/releases/archives/php-8.2.28-Win32-vs16-x64.zip" -OutFile php.zip -UseBasicParsing
           Expand-Archive -Path php.zip -DestinationPath php-portable -Force
 
       - name: Create php.ini
