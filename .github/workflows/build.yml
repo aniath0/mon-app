@@ -3,6 +3,11 @@ name: Build Windows Installer
 on:
   push:
     branches: [main]
+    tags: ['v*']          # un tag v1.0.0 publie aussi l'installeur dans "Releases"
+  workflow_dispatch:      # bouton "Run workflow" dans l'onglet Actions
+
+permissions:
+  contents: write         # nécessaire seulement pour publier une Release
 
 jobs:
   build:
@@ -10,27 +15,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
           extensions: mbstring, pdo_sqlite, openssl, fileinfo, curl, gd
+          tools: composer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+          cache: npm
 
       - name: Install PHP dependencies
-        run: composer install --no-dev --optimize-autoloader
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
       - name: Install Node dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         run: npm run build
@@ -50,14 +53,42 @@ jobs:
           Add-Content php-portable/php.ini "extension=fileinfo"
           Add-Content php-portable/php.ini "extension=curl"
           Add-Content php-portable/php.ini "extension=gd"
-          Add-Content php-portable/php.ini "include_path = '.'"
+          Add-Content php-portable/php.ini "memory_limit = 512M"
+          Add-Content php-portable/php.ini "max_execution_time = 120"
+          Add-Content php-portable/php.ini "date.timezone = Africa/Porto-Novo"
 
       - name: Copy app into subfolder
         run: |
           mkdir app-bundle
-          $exclude = @("app-bundle","php-portable","php.zip","lancer.bat","stopper.bat","monapp.iss","dist","node_modules")
-          Get-ChildItem -Path . | Where-Object { $_.Name -notin $exclude } | ForEach-Object {
-            Copy-Item -Path $_.FullName -Destination app-bundle -Recurse -Force
+          # On exclut tout ce qui ne doit pas partir chez le client :
+          # dépôt git, outils de build, base locale, PDF/QR déjà générés, .env de dev.
+          robocopy . app-bundle /E /NFL /NDL /NJH /NJS `
+            /XD "$PWD\app-bundle" "$PWD\php-portable" "$PWD\dist" "$PWD\node_modules" "$PWD\.git" "$PWD\.github" "$PWD\tests" "$PWD\public\pdf" "$PWD\public\qr" `
+            /XF php.zip lancer.bat stopper.bat monapp.iss .env database.sqlite *.log
+          if ($LASTEXITCODE -ge 8) { exit 1 } else { exit 0 }
+
+      - name: Prepare folders and router
+        run: |
+          foreach ($d in @(
+            "app-bundle/storage/framework/cache/data",
+            "app-bundle/storage/framework/sessions",
+            "app-bundle/storage/framework/views",
+            "app-bundle/storage/logs",
+            "app-bundle/bootstrap/cache",
+            "app-bundle/database",
+            "app-bundle/public/pdf",
+            "app-bundle/public/qr"
+          )) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
+
+          # Laravel 11+ ne fournit plus server.php : on le crée s'il manque.
+          if (-not (Test-Path app-bundle/server.php)) {
+            $router = @'
+          <?php
+          $uri = urldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '');
+          if ($uri !== '/' && file_exists(__DIR__.'/public'.$uri)) { return false; }
+          require_once __DIR__.'/public/index.php';
+          '@
+            Set-Content -Path app-bundle/server.php -Value $router -Encoding ASCII
           }
 
       - name: Create lancer.bat
@@ -65,26 +96,29 @@ jobs:
           $bat = @'
           @echo off
           cd /d "%~dp0"
-          set APP_DIR=%~dp0app-bundle
-          set PHP_DIR=%~dp0php-portable
+          set "APP_DIR=%~dp0app-bundle"
+          set "PHP_DIR=%~dp0php-portable"
           echo Demarrage de MonApp...
 
-          if not exist "%APP_DIR%\.env" (
-            echo Creation du fichier .env...
-            echo APP_NAME=MonApp > "%APP_DIR%\.env"
-            echo APP_ENV=production >> "%APP_DIR%\.env"
-            echo APP_KEY=base64:kcDznVIve8giC0eFAxc8yHDmHrCYtFKmO/CrKKMGoeE= >> "%APP_DIR%\.env"
-            echo APP_DEBUG=false >> "%APP_DIR%\.env"
-            echo APP_URL=http://127.0.0.1:8000 >> "%APP_DIR%\.env"
-            echo DB_CONNECTION=sqlite >> "%APP_DIR%\.env"
-            echo SESSION_DRIVER=file >> "%APP_DIR%\.env"
-            echo CACHE_STORE=file >> "%APP_DIR%\.env"
-            echo QUEUE_CONNECTION=sync >> "%APP_DIR%\.env"
-          )
+          if exist "%APP_DIR%\.env" goto envok
+          echo Creation du fichier .env...
+          (
+          echo APP_NAME=MonApp
+          echo APP_ENV=production
+          echo APP_KEY=
+          echo APP_DEBUG=false
+          echo APP_URL=http://127.0.0.1:8000
+          echo DB_CONNECTION=sqlite
+          echo SESSION_DRIVER=file
+          echo CACHE_STORE=file
+          echo QUEUE_CONNECTION=sync
+          ) > "%APP_DIR%\.env"
+          "%PHP_DIR%\php.exe" "%APP_DIR%\artisan" key:generate --force
+          :envok
 
           if not exist "%APP_DIR%\database\database.sqlite" (
             echo Creation de la base de donnees...
-            copy NUL "%APP_DIR%\database\database.sqlite"
+            copy NUL "%APP_DIR%\database\database.sqlite" > nul
           )
 
           echo Migration de la base de donnees...
@@ -109,7 +143,7 @@ jobs:
           $bat | Out-File -FilePath stopper.bat -Encoding ASCII
 
       - name: Install Inno Setup
-        run: choco install innosetup -y
+        run: choco install innosetup -y --no-progress
 
       - name: Create Inno Setup script
         run: |
@@ -126,25 +160,32 @@ jobs:
           PrivilegesRequired=lowest
 
           [Files]
-          Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs
-          Source: "app-bundle\*"; DestDir: "{app}\app-bundle"; Flags: recursesubdirs
-          Source: "lancer.bat"; DestDir: "{app}"
-          Source: "stopper.bat"; DestDir: "{app}"
+          Source: "php-portable\*"; DestDir: "{app}\php-portable"; Flags: recursesubdirs createallsubdirs ignoreversion
+          Source: "app-bundle\*"; DestDir: "{app}\app-bundle"; Flags: recursesubdirs createallsubdirs ignoreversion
+          Source: "lancer.bat"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "stopper.bat"; DestDir: "{app}"; Flags: ignoreversion
 
           [Icons]
-          Name: "{group}\Lancer MonApp"; Filename: "{app}\lancer.bat"
-          Name: "{userdesktop}\MonApp"; Filename: "{app}\lancer.bat"
+          Name: "{group}\Lancer MonApp"; Filename: "{app}\lancer.bat"; WorkingDir: "{app}"
+          Name: "{group}\Arreter MonApp"; Filename: "{app}\stopper.bat"; WorkingDir: "{app}"
+          Name: "{userdesktop}\MonApp"; Filename: "{app}\lancer.bat"; WorkingDir: "{app}"
 
           [Run]
-          Filename: "{app}\lancer.bat"; Description: "Lancer l'application"; Flags: postinstall nowait
+          Filename: "{app}\lancer.bat"; Description: "Lancer l'application"; Flags: postinstall nowait skipifsilent
           '@
           $iss | Out-File -FilePath monapp.iss -Encoding UTF8
 
       - name: Compile installer
-        run: iscc monapp.iss
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" monapp.iss'
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: MonApp-Installer
           path: dist/MonApp-Installer.exe
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MonApp-Installer.exe

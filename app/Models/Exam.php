@@ -9,7 +9,7 @@ class Exam extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['type', 'name', 'params'];
+    protected $fillable = [ 'name', 'params'];
 
     protected $casts = [
         'params' => 'array', // JSON pour les params

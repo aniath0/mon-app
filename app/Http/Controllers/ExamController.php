@@ -15,16 +15,12 @@ class ExamController extends Controller
 
     public function create()
     {
-        $lastExam = Exam::orderByDesc('type')->first();
-        $nextType = $lastExam ? ((int)$lastExam->type + 1) : 1;
-
-        return view('exams.create', compact('nextType'));
+        return view('exams.create');
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'type' => 'required|integer|unique:exams,type',
             'name' => 'required|string|max:255',
             'params' => 'nullable|array',
             'params.*.param' => 'nullable|string|max:255',
@@ -38,7 +34,6 @@ class ExamController extends Controller
         });
 
         Exam::create([
-            'type' => $request->type,
             'name' => $request->name,
             'params' => array_values($cleanedParams), // Réindexer le tableau
         ]);
@@ -61,7 +56,6 @@ class ExamController extends Controller
     public function update(Request $request, Exam $exam)
     {
         $request->validate([
-            'type' => 'required|integer|unique:exams,type,' . $exam->id,
             'name' => 'required|string|max:255',
             'params' => 'nullable|array',
             'params.*.param' => 'nullable|string|max:255',
@@ -75,7 +69,6 @@ class ExamController extends Controller
         });
 
         $exam->update([
-            'type' => $request->type,
             'name' => $request->name,
             'params' => array_values($cleanedParams), // Réindexer le tableau
         ]);
@@ -95,14 +88,14 @@ class ExamController extends Controller
     }
 
     /**
-     * Récupérer les paramètres d'un examen (API pour JavaScript)
+     * Récupérer le nom et les paramètres d'un examen (API pour JavaScript).
+     * Le formulaire de résultats choisit le tableau d'après le nom.
      */
     public function getParams(Exam $exam)
     {
         return response()->json([
             'id' => $exam->id,
             'name' => $exam->name,
-            'type' => $exam->type,
             'params' => $exam->params ?? []
         ]);
     }
@@ -112,7 +105,7 @@ class ExamController extends Controller
      */
     public function getAllExams()
     {
-        $exams = Exam::select('id', 'name', 'type', 'params')->get();
+        $exams = Exam::select('id', 'name', 'params')->get();
         return response()->json($exams);
     }
 }
